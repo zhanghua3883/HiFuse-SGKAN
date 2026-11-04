@@ -1,3 +1,6 @@
+import os
+os.environ["OPENCV_LOG_LEVEL"] = "ERROR"
+os.environ['TMPDIR'] = '/home/zjf/tmp'  # make sure this directory exists and is writable
 import argparse
 import os
 from collections import OrderedDict
@@ -11,7 +14,7 @@ import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.optim as optim
 import yaml
-
+import time
 # from albumentations.augmentations import transforms
 from albumentations.augmentations import geometric
 
@@ -278,21 +281,58 @@ def main():
     cudnn.benchmark = True
 
     # create model
-    model = archs.__dict__[config['arch']](config['num_classes'], config['input_channels'], config['deep_supervision'], embed_dims=config['input_list'], no_kan=config['no_kan'])
+    # model = archs.__dict__[config['arch']](config['num_classes'], config['input_channels'], config['deep_supervision'], embed_dims=config['input_list'], no_kan=config['no_kan'])
+    model = archs.__dict__[config['arch']](input_channel=config['input_channels'], num_classes=config['num_classes'])
+
     model_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     model = model.cuda()
-    # 创建一个示例输入张量
+    # Create a dummy input tensor for profiling
     input_tensor = torch.randn(1, config['input_channels'], config['input_h'], config['input_w']).cuda()
-    # 计算 FLOPs 和参数数量
+    # Compute FLOPs and parameter count
+    
     flops, params = profile(model, inputs=(input_tensor, ))
-    # 将 FLOPs 转换为 GFLOPs
+    # Convert FLOPs to GFLOPs
     gflops = flops / 1e9
 
     print(f"GFLOPs: {gflops:.2f}G")
-    print(f"Total Trainable Parameters: {params}")
+    # print(f"Total Parameters: {params}")
   
     print(f"Total Trainable Parameters: {model_parameters}")
 
+    '''
+    # Assuming input_tensor is already defined, e.g.: input_tensor = torch.randn(1, 3, 512, 512).cuda()
+    model.eval()  # switch to evaluation mode
+
+    # --- Warm-up (avoid first-run overhead) ---
+    print("Warming up...")
+    with torch.no_grad():
+        for _ in range(10):
+            _ = model(input_tensor)
+
+    # --- Synchronize GPU & Start Timer ---
+    torch.cuda.synchronize()  # ensure all GPU ops are finished
+    start_time = time.time()
+
+    # --- Run multiple inferences for stable measurement ---
+    num_runs = 100
+    with torch.no_grad():
+        for _ in range(num_runs):
+            _ = model(input_tensor)
+
+    # --- Synchronize & End Timer ---
+    torch.cuda.synchronize()
+    end_time = time.time()
+
+    # --- Compute FPS ---
+    total_time = end_time - start_time
+    time_per_frame = total_time / num_runs
+    fps = 1.0 / time_per_frame
+
+    print(f"\n[Inference Speed]")
+    print(f"Total time for {num_runs} runs: {total_time:.4f} s")
+    print(f"Average time per frame: {time_per_frame * 1000:.2f} ms")
+    print(f"FPS: {fps:.2f}")
+    '''
     param_groups = []
 
     kan_fc_params = []
@@ -338,13 +378,20 @@ def main():
     shutil.copy2('archs.py', f'{output_dir}/{exp_name}/')
 
     dataset_name = config['dataset']
-    img_ext = '.png'
+    if dataset_name == 'Kvasir':
+        img_ext = '.jpg'
+    else:
+        img_ext = '.png'
 
     if dataset_name == 'busi':
         mask_ext = '_mask.png'
     elif dataset_name == 'glas':
         mask_ext = '.png'
     elif dataset_name == 'cvc':
+        mask_ext = '.png'
+    elif dataset_name == 'Kvasir':
+        mask_ext ='.jpg'
+    else:
         mask_ext = '.png'
 
     # Data loading code
