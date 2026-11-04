@@ -38,7 +38,6 @@ Supported datasets (auto-detected by name):
 | `--dataset` | Image ext | Mask ext    |
 | ----------- | --------- | ----------- |
 | `cvc`       | `.png`    | `.png`      |
-| `Kvasir`    | `.jpg`    | `.jpg`      |
 | `busi`      | `.png`    | `_mask.png` |
 | `glas`      | `.png`    | `.png`      |
 
@@ -53,13 +52,7 @@ python train.py \
     --data_dir inputs \
     --output_dir outputs \
     --name hifuse_sgkan_cvc \
-    --num_classes 1 \
     --batch_size 8 \
-    --epochs 400 \
-    --lr 1e-4 \
-    --kan_lr 1e-2 \
-    --optimizer SGD \
-    --loss BCEDiceLoss
 ```
 
 The best checkpoint and training log (TensorBoard + CSV) are saved to `outputs/<name>/`.
