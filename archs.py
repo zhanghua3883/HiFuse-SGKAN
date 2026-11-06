@@ -178,11 +178,11 @@ class HiFuse_SGKAN(nn.Module):
     """Medical image segmentation network: encoder + SGKAN hybrid attention backbone + progressive decoder."""
 
     def __init__(self, num_classes, input_channels=3, deep_supervision=False, img_size=224,
-                 patch_size=16, in_chans=3, embed_dims=[256, 320, 512], no_kan=False,
+                 patch_size=16, in_chans=3, embed_dims=[128, 160, 256], no_kan=False,
                  drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm, depths=[1, 1, 1],
                  global_dims=[8, 16, 32, 64, 128], **kwargs):
         super().__init__()
-        embed_dims = [128, 160, 256]
+        # embed_dims = [128, 160, 256]
         kan_input_dim = embed_dims[0]
 
         # Encoder
