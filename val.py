@@ -1,43 +1,34 @@
-#! /data/cxli/miniconda3/envs/th200/bin/python
 import argparse
 import os
 from glob import glob
 import random
 import numpy as np
 
-import cv2
 import torch
 import torch.backends.cudnn as cudnn
 import yaml
-# from albumentations.augmentations import transforms
-# from albumentations.core.composition import Compose
 
 import albumentations as A
-from albumentations.core.composition import Compose
 
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from collections import OrderedDict
 
 import archs
-
 from dataset import Dataset
 from metrics import iou_score
 from utils import AverageMeter
-from albumentations import RandomRotate90,Resize
-import time
 
 from PIL import Image
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--name', default=None, help='model name')
-    parser.add_argument('--output_dir', default='outputs', help='ouput dir')
-            
+    parser.add_argument('--output_dir', default='outputs', help='output dir')
     args = parser.parse_args()
-
     return args
+
 
 def seed_torch(seed=1029):
     random.seed(seed)
@@ -57,18 +48,18 @@ def main():
     with open(f'{args.output_dir}/{args.name}/config.yml', 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    print('-'*20)
+    print('-' * 20)
     for key in config.keys():
         print('%s: %s' % (key, str(config[key])))
-    print('-'*20)
+    print('-' * 20)
 
     cudnn.benchmark = True
 
-    # model = archs.__dict__[config['arch']](config['num_classes'], config['input_channels'], config['deep_supervision'], embed_dims=config['input_list'])
-    model = archs.__dict__[config['arch']](input_channel=config['input_channels'], num_classes=config['num_classes'])
-
+    model = archs.__dict__[config['arch']](input_channel=config['input_channels'],
+                                           num_classes=config['num_classes'])
     model = model.cuda()
 
+    # dataset file extensions
     dataset_name = config['dataset']
     img_ext = '.png'
 
@@ -79,18 +70,17 @@ def main():
     elif dataset_name == 'cvc':
         mask_ext = '.png'
 
-    # Data loading code
+    # data loading
     img_ids = sorted(glob(os.path.join(config['data_dir'], config['dataset'], 'images', '*' + img_ext)))
-    # img_ids.sort()
     img_ids = [os.path.splitext(os.path.basename(p))[0] for p in img_ids]
 
     _, val_img_ids = train_test_split(img_ids, test_size=0.2, random_state=config['dataseed'])
 
     ckpt = torch.load(f'{args.output_dir}/{args.name}/model.pth')
 
-    try:        
+    try:
         model.load_state_dict(ckpt)
-    except:
+    except Exception:
         print("Pretrained model keys:", ckpt.keys())
         print("Current model keys:", model.state_dict().keys())
 
@@ -103,17 +93,14 @@ def main():
             print(f"Key: {key}")
 
         model.load_state_dict(ckpt, strict=False)
-        
+
     model.eval()
 
-    # val_transform = Compose([
-    #     Resize(config['input_h'], config['input_w']),
-    #     transforms.Normalize(),
-    # ])
     val_transform = A.Compose([
         A.Resize(config['input_h'], config['input_w']),
         A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+
     val_dataset = Dataset(
         img_ids=val_img_ids,
         img_dir=os.path.join(config['data_dir'], config['dataset'], 'images'),
@@ -122,6 +109,7 @@ def main():
         mask_ext=mask_ext,
         num_classes=config['num_classes'],
         transform=val_transform)
+
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=config['batch_size'],
@@ -138,7 +126,7 @@ def main():
             input = input.cuda()
             target = target.cuda()
             model = model.cuda()
-            # compute output
+
             output = model(input)
 
             iou, dice, hd95_ = iou_score(output, target)
@@ -147,8 +135,8 @@ def main():
             hd95_avg_meter.update(hd95_, input.size(0))
 
             output = torch.sigmoid(output).cpu().numpy()
-            output[output>=0.5]=1
-            output[output<0.5]=0
+            output[output >= 0.5] = 1
+            output[output < 0.5] = 0
 
             os.makedirs(os.path.join(args.output_dir, config['name'], 'out_val'), exist_ok=True)
             for pred, img_id in zip(output, meta['img_id']):
@@ -157,12 +145,10 @@ def main():
                 img = Image.fromarray(pred_np, 'L')
                 img.save(os.path.join(args.output_dir, config['name'], 'out_val/{}.jpg'.format(img_id)))
 
-    
     print(config['name'])
     print('IoU: %.4f' % iou_avg_meter.avg)
     print('Dice: %.4f' % dice_avg_meter.avg)
     print('HD95: %.4f' % hd95_avg_meter.avg)
-
 
 
 if __name__ == '__main__':
